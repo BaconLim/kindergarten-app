@@ -1,0 +1,30 @@
+import { useState } from 'react'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import Layout from './components/Layout'
+import Login from './pages/Login'
+import TeacherDashboard from './pages/TeacherDashboard'
+import AdminDashboard from './pages/AdminDashboard'
+import ParentDashboard from './pages/ParentDashboard'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          
+          <Route path="/" element={<Layout />}>
+            {/* Protected Routes placeholder */}
+            <Route path="teacher" element={<TeacherDashboard />} />
+            <Route path="admin" element={<AdminDashboard />} />
+            <Route path="parent" element={<ParentDashboard />} />
+            <Route index element={<Navigate to="/login" replace />} />
+          </Route>
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  )
+}
+
+export default App
