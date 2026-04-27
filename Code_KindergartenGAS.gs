@@ -51,14 +51,26 @@ function doPost(e) {
       case 'delete_book':
         responseData = deleteBook(payload, tokenData);
         break;
+      case 'edit_book':
+        responseData = editBook(payload, tokenData);
+        break;
       case 'get_teacher_books':
         responseData = getTeacherBooks(tokenData);
+        break;
+      case 'create_books_batch':
+        responseData = createBooksBatch(payload, tokenData);
         break;
       case 'get_student_books':
         responseData = getStudentBooks(payload, tokenData);
         break;
       case 'reply_book':
         responseData = replyBook(payload, tokenData);
+        break;
+      case 'save_profile':
+        responseData = saveProfile(payload, tokenData);
+        break;
+      case 'get_profiles':
+        responseData = getProfiles(payload, tokenData);
         break;
       default:
         throw new Error("未知的動作請求 (Unknown action)");
@@ -325,4 +337,117 @@ function getTeacherBooks(tokenData) {
   
   // 加入姓名與班級
   return attachStudentInfo(sheetId, myBooks);
+}
+
+function editBook(payload, tokenData) {
+  if (!tokenData || tokenData.role !== 'admin') throw new Error("權限不足");
+  const sheetId = DB_MAP[tokenData.school_id];
+  const sheet = SpreadsheetApp.openById(sheetId).getSheetByName("ContactBooks");
+  const books = getSheetData(sheetId, "ContactBooks");
+  
+  const book = books.find(b => b.id == payload.book_id);
+  if (!book) throw new Error("找不到該聯絡簿");
+  
+  const headers = sheet.getDataRange().getValues()[0];
+  const contentCol = headers.indexOf('content') + 1;
+  sheet.getRange(book._rowNumber, contentCol).setValue(payload.content);
+  
+  return { message: "批改成功" };
+}
+
+function createBooksBatch(payload, tokenData) {
+  if (!tokenData || tokenData.role !== 'teacher') throw new Error("權限不足");
+  const sheetId = DB_MAP[tokenData.school_id];
+  const sheet = SpreadsheetApp.openById(sheetId).getSheetByName("ContactBooks");
+  const today = payload.date || new Date().toISOString().split('T')[0];
+  
+  const ids = payload.student_ids;
+  if (!ids || !Array.isArray(ids)) throw new Error("無效的學生名單");
+  
+  let count = 0;
+  for(let i=0; i<ids.length; i++) {
+    const newId = new Date().getTime() + i; 
+    sheet.appendRow([
+      newId,
+      ids[i],
+      today,
+      payload.content,
+      "pending_review",
+      ""
+    ]);
+    count++;
+  }
+  
+  return { message: `批次建立成功 (${count} 筆)` };
+}
+
+function initStudentProfilesSheet(ss) {
+  let sheet = ss.getSheetByName("StudentProfiles");
+  if (!sheet) {
+    sheet = ss.insertSheet("StudentProfiles");
+    sheet.appendRow(["student_id", "nickname", "birthday", "gender", "diseases", "care_notes", "parent_name", "parent_relation", "phone", "address", "emerg_name", "emerg_relation", "emerg_phone", "updated_at"]);
+  }
+  return sheet;
+}
+
+function saveProfile(payload, tokenData) {
+  if (!tokenData || tokenData.role !== 'parent') throw new Error("只有家長可以呼叫此功能");
+  if (!tokenData.child_student_id) throw new Error("家長帳戶未綁定學生");
+  
+  const sheetId = DB_MAP[tokenData.school_id];
+  const ss = SpreadsheetApp.openById(sheetId);
+  const sheet = initStudentProfilesSheet(ss);
+  
+  const student_id = tokenData.child_student_id;
+  
+  let profiles = [];
+  try {
+    profiles = getSheetData(sheetId, "StudentProfiles");
+  } catch(e) {}
+  
+  const profile = profiles.find(p => p.student_id == student_id);
+  const headers = sheet.getDataRange().getValues()[0];
+  const rowData = headers.map(h => {
+    if (h === 'student_id') return student_id;
+    if (h === 'updated_at') return new Date().toISOString();
+    return payload[h] !== undefined ? payload[h] : (profile ? profile[h] : "");
+  });
+
+  if (profile) {
+    for(let i=0; i<headers.length; i++) {
+      sheet.getRange(profile._rowNumber, i + 1).setValue(rowData[i]);
+    }
+  } else {
+    sheet.appendRow(rowData);
+  }
+  return { message: "儲存成功" };
+}
+
+function getProfiles(payload, tokenData) {
+  if (!tokenData) throw new Error("權限不足");
+  const sheetId = DB_MAP[tokenData.school_id];
+  const ss = SpreadsheetApp.openById(sheetId);
+  initStudentProfilesSheet(ss);
+  
+  let profiles = [];
+  try {
+    profiles = getSheetData(sheetId, "StudentProfiles");
+  } catch(e) {}
+  
+  if (tokenData.role === 'parent') {
+    return profiles.filter(p => p.student_id == tokenData.child_student_id);
+  } else if (tokenData.role === 'teacher') {
+    const students = getSheetData(sheetId, "Students");
+    const myStudentIds = students
+      .filter(s => s.class_id == tokenData.managed_class || s.class_name == tokenData.managed_class)
+      .map(s => String(s.id));
+    
+    // Attach student name
+    const filtered = profiles.filter(p => myStudentIds.includes(String(p.student_id)));
+    return filtered.map(p => {
+      const stu = students.find(s => String(s.id) == String(p.student_id));
+      return { ...p, student_name: stu ? stu.name : '未知學生' };
+    });
+  }
+  return [];
 }

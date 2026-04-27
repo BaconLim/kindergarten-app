@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '../contexts/AuthContext';
 
+const NOTE_OPTIONS = ['衣褲', '牙刷', '漱口杯', '衛生紙', '棉被清洗'];
+const READ_OPTIONS = ['園訊', '餐點表', '通知單', '教學計劃', '班報', '口罩', '收據'];
+
 function TeacherDashboard() {
   const [students, setStudents] = useState([]);
   const [books, setBooks] = useState([]);
@@ -10,6 +13,9 @@ function TeacherDashboard() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [booksLoading, setBooksLoading] = useState(false);
+  
+  const [selectedNotes, setSelectedNotes] = useState([]);
+  const [selectedReads, setSelectedReads] = useState([]);
   
   const fetchStudents = async () => {
     try {
@@ -45,6 +51,14 @@ function TeacherDashboard() {
     fetchBooks();
   }, []);
 
+  const handleCheckboxChange = (option, type) => {
+    if (type === 'note') {
+      setSelectedNotes(prev => prev.includes(option) ? prev.filter(i => i !== option) : [...prev, option]);
+    } else {
+      setSelectedReads(prev => prev.includes(option) ? prev.filter(i => i !== option) : [...prev, option]);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -53,21 +67,46 @@ function TeacherDashboard() {
 
     try {
       const today = new Date().toISOString().split('T')[0];
-      const payload = {
-        action: 'create_book',
-        payload: {
-          student_id: parseInt(studentId),
-          date: today,
-          content: content
-        }
-      };
       
-      const response = await api.post('', payload);
-      if (response.data.status !== 'success') throw new Error('GAS Error');
+      let finalContent = content;
+      if (selectedNotes.length > 0) {
+        finalContent += `\n\n【家長留意事項】：${selectedNotes.join('、')}`;
+      }
+      if (selectedReads.length > 0) {
+        finalContent += `\n\n【資料詳讀】：${selectedReads.join('、')}`;
+      }
+
+      if (studentId === 'ALL') {
+        const studentIds = students.map(s => s.id);
+        const payload = {
+          action: 'create_books_batch',
+          payload: {
+            student_ids: studentIds,
+            date: today,
+            content: finalContent
+          }
+        };
+        const response = await api.post('', payload);
+        if (response.data.status !== 'success') throw new Error('GAS Error');
+        setSuccess(`已全班群發 (${studentIds.length} 篇)！`);
+      } else {
+        const payload = {
+          action: 'create_book',
+          payload: {
+            student_id: parseInt(studentId),
+            date: today,
+            content: finalContent
+          }
+        };
+        const response = await api.post('', payload);
+        if (response.data.status !== 'success') throw new Error('GAS Error');
+        setSuccess('聯絡簿草稿已建立，狀態為「待審核」！');
+      }
       
-      setSuccess('聯絡簿草稿已建立，狀態為「待審核」！');
-      setContent(''); // Clear the form
-      fetchBooks(); // 重抓資料
+      setContent(''); 
+      setSelectedNotes([]);
+      setSelectedReads([]);
+      fetchBooks(); 
     } catch (err) {
       console.error(err);
       setError('建立失敗，請確認資料格式或權限。');
@@ -105,41 +144,67 @@ function TeacherDashboard() {
 
         {success && (
           <div className="bg-green-50 text-green-700 p-3 rounded-lg text-sm mb-4 border border-green-200 flex items-center justify-center w-full">
-            <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+            <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
             {success}
           </div>
         )}
 
         {error && (
           <div className="bg-red-50 text-red-500 p-3 rounded-lg text-sm mb-4 border border-red-100 flex items-center justify-center w-full">
-             <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path></svg>
+             <svg className="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path></svg>
             {error}
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="flex flex-col items-center space-y-5 w-full mt-2">
-          <div className="flex flex-col items-center w-full">
-            <label className="block text-sm font-medium text-gray-600 mb-2 text-center">學生 ID</label>
+          
+          <div className="flex flex-col items-center w-full border-b border-gray-100 pb-4">
+            <label className="block text-sm font-bold text-indigo-700 mb-2 text-center">發送對象</label>
             <select 
-              className="px-3 py-2 text-sm text-center rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-gray-50 mb-1 w-full max-w-xs"
+              className="px-3 py-2 text-sm text-center rounded-lg border border-indigo-300 focus:ring-2 focus:ring-indigo-500 outline-none bg-indigo-50 mb-1 w-full max-w-xs font-semibold text-indigo-900"
               value={studentId}
               onChange={(e) => setStudentId(e.target.value)}
             >
               {students.length === 0 ? (
                  <option value="">載入中或無學生...</option>
               ) : (
-                students.map(s => (
-                  <option key={s.id} value={s.id}>{s.id}號 - {s.name} ({s.display_class_name})</option>
-                ))
+                <>
+                  <option value="ALL">🌟 全班群發 (共 {students.length} 人)</option>
+                  {students.map(s => (
+                    <option key={s.id} value={s.id}>{s.id}號 - {s.name} ({s.display_class_name})</option>
+                  ))}
+                </>
               )}
             </select>
           </div>
 
-          <div className="flex flex-col items-center w-full">
-            <label className="block text-sm font-medium text-gray-600 mb-2 text-center">今日生活紀錄</label>
+          <div className="w-full text-sm">
+            <label className="block font-semibold text-gray-700 mb-2">📎 家長留意事項</label>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {NOTE_OPTIONS.map(opt => (
+                <label key={opt} className="flex items-center space-x-1 bg-gray-50 px-2 py-1 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-100">
+                  <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500" checked={selectedNotes.includes(opt)} onChange={() => handleCheckboxChange(opt, 'note')} />
+                  <span className="text-gray-600">{opt}</span>
+                </label>
+              ))}
+            </div>
+
+            <label className="block font-semibold text-gray-700 mb-2">📑 資料詳讀</label>
+            <div className="flex flex-wrap gap-2">
+              {READ_OPTIONS.map(opt => (
+                <label key={opt} className="flex items-center space-x-1 bg-gray-50 px-2 py-1 rounded-md border border-gray-200 cursor-pointer hover:bg-gray-100">
+                  <input type="checkbox" className="rounded text-indigo-600 focus:ring-indigo-500" checked={selectedReads.includes(opt)} onChange={() => handleCheckboxChange(opt, 'read')} />
+                  <span className="text-gray-600">{opt}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center w-full pt-2">
+            <label className="block text-sm font-semibold text-gray-700 mb-2 w-full text-left">✍️ 今日生活紀錄 (必填)</label>
             <textarea 
               required
-              rows="6"
+              rows="5"
               className="px-3 py-2 text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none w-full"
               placeholder="例如：小明今天吃飯很快，有幫忙收玩具！"
               value={content}
@@ -147,13 +212,13 @@ function TeacherDashboard() {
             ></textarea>
           </div>
 
-          <div className="w-full flex justify-end mt-6">
+          <div className="w-full flex justify-end mt-4">
             <button 
               type="submit" 
               disabled={loading || !content || !studentId}
-              className={`py-2 px-6 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium transition-colors flex items-center justify-center shadow-sm ${loading || !content || !studentId ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`w-full sm:w-auto py-3 sm:py-2 px-8 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-xl sm:rounded-lg font-bold transition-colors flex items-center justify-center shadow-md ${loading || !content || !studentId ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              {loading ? '送出...' : '送出'}
+              {loading ? '送出中...' : studentId === 'ALL' ? '送出全班聯絡簿' : '送出單人聯絡簿'}
             </button>
           </div>
         </form>
@@ -191,7 +256,7 @@ function TeacherDashboard() {
                       <div className="w-5 h-5 rounded-full bg-green-200 text-green-800 flex items-center justify-center text-[10px] font-bold">家</div>
                       <span className="text-xs font-semibold text-green-800">家長回覆：</span>
                     </div>
-                    <p className="text-sm text-green-900 ml-7">{book.parent_reply}</p>
+                    <p className="text-sm text-green-900 ml-7 whitespace-pre-wrap">{book.parent_reply}</p>
                   </div>
                 )}
               </div>

@@ -6,6 +6,7 @@ import Login from './pages/Login'
 import TeacherDashboard from './pages/TeacherDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import ParentDashboard from './pages/ParentDashboard'
+import Profile from './pages/Profile'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="teacher" element={<TeacherDashboard />} />
             <Route path="admin" element={<AdminDashboard />} />
             <Route path="parent" element={<ParentDashboard />} />
+            <Route path="profile" element={<Profile />} />
             <Route index element={<Navigate to="/login" replace />} />
           </Route>
         </Routes>

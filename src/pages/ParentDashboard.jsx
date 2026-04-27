@@ -35,9 +35,8 @@ function ParentDashboard() {
     setReplyInputs(prev => ({ ...prev, [id]: text }));
   };
 
-  const handleReplySubmit = async (bookId) => {
-    const defaultReply = "已閱。";
-    const finalReply = replyInputs[bookId] || defaultReply;
+  const handleReplySubmit = async (bookId, quickReply = null) => {
+    const finalReply = quickReply || replyInputs[bookId] || "已閱。";
 
     try {
       setSubmittingReplyId(bookId);
@@ -130,19 +129,29 @@ function ParentDashboard() {
                   ) : (
                     <div className="ml-8">
                       <textarea
-                        rows="3"
-                        placeholder="請輸入給老師的回覆..."
+                        rows="2"
+                        placeholder="想對老師說些什麼..."
                         className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 outline-none resize-none mb-2"
                         value={replyInputs[book.id] || ''}
                         onChange={(e) => handleReplyChange(book.id, e.target.value)}
                       ></textarea>
-                      <button 
-                        onClick={() => handleReplySubmit(book.id)}
-                        disabled={submittingReplyId === book.id || !(replyInputs[book.id]?.trim())}
-                        className={`w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-xs transition-colors flex justify-center items-center gap-2 ${submittingReplyId === book.id || !(replyInputs[book.id]?.trim()) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {submittingReplyId === book.id ? '送出中...' : '送出回覆 (送出後無法修改)'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleReplySubmit(book.id, "已看過")}
+                          disabled={submittingReplyId === book.id}
+                          className={`flex-1 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 rounded-lg font-bold text-xs transition-colors flex justify-center items-center gap-1 ${submittingReplyId === book.id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+                          一鍵回覆「已看過」
+                        </button>
+                        <button 
+                          onClick={() => handleReplySubmit(book.id)}
+                          disabled={submittingReplyId === book.id || !(replyInputs[book.id]?.trim())}
+                          className={`flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium text-xs transition-colors flex justify-center items-center gap-1 ${submittingReplyId === book.id || !(replyInputs[book.id]?.trim()) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          送出文字回覆
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

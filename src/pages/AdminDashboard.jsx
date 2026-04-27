@@ -7,6 +7,8 @@ function AdminDashboard() {
   const [error, setError] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [editingBookId, setEditingBookId] = useState(null);
+  const [editContent, setEditContent] = useState('');
 
   const fetchPendingBooks = async () => {
     try {
@@ -60,6 +62,31 @@ function AdminDashboard() {
     } catch (err) {
       console.error(err);
       alert('刪除失敗，請稍後再試。');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const handleEditStart = (book) => {
+    setEditingBookId(book.id);
+    setEditContent(book.content);
+  };
+
+  const handleEditSave = async (id) => {
+    try {
+      setProcessing(true);
+      const response = await api.post('', {
+        action: 'edit_book',
+        payload: { book_id: id, content: editContent }
+      });
+      if (response.data.status !== 'success') throw new Error(response.data.message);
+      
+      // Update local state
+      setBooks(books.map(b => b.id === id ? { ...b, content: editContent } : b));
+      setEditingBookId(null);
+    } catch (err) {
+      console.error(err);
+      alert('批改失敗，請稍後再試。');
     } finally {
       setProcessing(false);
     }
@@ -180,9 +207,19 @@ function AdminDashboard() {
                   <span>ID: {book.student_id}</span>
                 </div>
               </div>
-              <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 rounded-lg border border-gray-100 mb-4 w-full">
-                {book.content}
-              </p>
+
+              {editingBookId === book.id ? (
+                <textarea
+                  className="text-gray-800 text-sm leading-relaxed w-full bg-yellow-50 p-4 rounded-lg border border-yellow-300 mb-4 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  rows="6"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                />
+              ) : (
+                <p className="text-gray-800 text-base leading-relaxed whitespace-pre-wrap bg-gray-50 p-4 rounded-lg border border-gray-100 mb-4 w-full">
+                  {book.content}
+                </p>
+              )}
               
               <div className="w-full flex justify-end gap-2">
                 <button 
@@ -193,6 +230,27 @@ function AdminDashboard() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"></path></svg>
                   刪除
                 </button>
+
+                {editingBookId === book.id ? (
+                  <button 
+                    onClick={() => handleEditSave(book.id)}
+                    disabled={processing}
+                    className="py-2 px-4 bg-yellow-500 hover:bg-yellow-600 text-white text-sm rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm flex-1"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"></path></svg>
+                    確認批改
+                  </button>
+                ) : (
+                  <button 
+                    onClick={() => handleEditStart(book)}
+                    disabled={processing}
+                    className="py-2 px-4 bg-indigo-50 hover:bg-indigo-100 text-indigo-600 text-sm rounded-lg font-medium transition-colors flex items-center justify-center gap-2 shadow-sm"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    批改
+                  </button>
+                )}
+
                 <button 
                   onClick={() => handlePublish(book.id)}
                   disabled={processing}
