@@ -27,7 +27,11 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       const res = await api.post('', { action: 'login', payload: { username, password } });
-      if (res.data.status !== "success") throw new Error(res.data.message);
+      if (res.data.status !== "success") {
+        // 將後端的診斷訊息丟出去
+        throw new Error(res.data.message || '帳號或密碼錯誤');
+      }
+      
       const access_token = res.data.data.access_token;
       localStorage.setItem('token', access_token);
       setToken(access_token);
@@ -40,7 +44,10 @@ export const AuthProvider = ({ children }) => {
       setUserRole(role);
       navigate(`/${role}`);
       return true;
-    } catch (error) { return false; }
+    } catch (error) {
+      // 這裡要把錯誤訊息往上拋給 Login.jsx
+      throw error;
+    }
   };
 
   const logout = () => {
