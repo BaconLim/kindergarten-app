@@ -36,7 +36,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('token', access_token);
       setToken(access_token);
       
-      const b64Str = access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      // 無敵防彈解析器：判斷是否有 '.'，並自動濾除多餘空白
+      let b64Str = access_token.includes('.') ? access_token.split('.')[1] : access_token;
+      b64Str = b64Str.trim().replace(/-/g, '+').replace(/_/g, '/');
+      
       const jwtPayload = JSON.parse(decodeURIComponent(escape(atob(b64Str))));
       const role = jwtPayload.role || "parent";
       
