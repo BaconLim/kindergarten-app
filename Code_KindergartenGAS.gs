@@ -33,8 +33,8 @@ function doPost(e) {
       case 'edit_book': return response(handleEditBook(school, payload));
       case 'delete_book': return response(handleDeleteBook(school, payload));
       case 'reply_book': return response(handleReplyBook(school, payload));
-      case 'get_profiles': return response(handleGetProfiles(school, userData.student_id));
-      case 'save_profile': return response(handleSaveProfile(school, userData.student_id, payload));
+      case 'get_profiles': return response(handleGetProfiles(school, payload?.student_id || userData.student_id));
+      case 'save_profile': return response(handleSaveProfile(school, payload?.student_id || userData.student_id, payload));
       default: return response({ status: 'error', message: '未知行動' });
     }
   } catch (err) {
@@ -141,7 +141,12 @@ function handleGetReviews(school) {
     .filter(b => b.status === 'pending_review')
     .map(b => {
       const stu = students.find(s => String(s.id) == String(b.student_id));
-      return { ...b, student_name: stu ? stu.name : '未知學生' };
+      return { 
+        ...b, 
+        student_name: stu ? stu.name : '未知學生',
+        class_name: stu ? stu.class_name : '未指定班級',
+        display_class_name: stu ? stu.class_name : '未指定班級'
+      };
     });
     
   return { status: 'success', data: pendingBooks };
@@ -190,7 +195,7 @@ function handleEditBook(school, payload) {
   const idCol = data[0].indexOf('id');
   const contentCol = data[0].indexOf('content');
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] == payload.book_id) {
+    if (String(data[i][idCol]) === String(payload.book_id)) {
       sheet.getRange(i + 1, contentCol + 1).setValue(payload.content);
       return { status: 'success' };
     }
@@ -204,7 +209,7 @@ function handleDeleteBook(school, payload) {
   const data = sheet.getDataRange().getValues();
   const idCol = data[0].indexOf('id');
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] == payload.book_id) {
+    if (String(data[i][idCol]) === String(payload.book_id)) {
       sheet.deleteRow(i + 1);
       return { status: 'success' };
     }
@@ -219,7 +224,7 @@ function handleReplyBook(school, payload) {
   const idCol = data[0].indexOf('id');
   const replyCol = data[0].indexOf('parent_reply');
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] == payload.book_id) {
+    if (String(data[i][idCol]) === String(payload.book_id)) {
       sheet.getRange(i + 1, replyCol + 1).setValue(payload.parent_reply);
       return { status: 'success' };
     }
@@ -259,7 +264,7 @@ function updateStatus(school, sheetName, id, status) {
   const idCol = data[0].indexOf('id');
   const statusCol = data[0].indexOf('status');
   for (let i = 1; i < data.length; i++) {
-    if (data[i][idCol] == id) {
+    if (String(data[i][idCol]) === String(id)) {
       sheet.getRange(i + 1, statusCol + 1).setValue(status);
       break;
     }

@@ -28,7 +28,9 @@ function ParentDashboard() {
 
   return (
     <div className="space-y-4 max-w-lg mx-auto pb-20">
-      <h2 className="text-xl font-bold text-center">聯絡簿紀錄</h2>
+      <h2 className="text-xl font-bold text-center">
+        {books.length > 0 ? `${books[0].student_name} 的聯絡簿` : '聯絡簿紀錄'}
+      </h2>
       {books.length === 0 ? <p className="text-center text-gray-400">目前尚無紀錄</p> : books.map(b => (
         <div key={b.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex justify-between items-center mb-3">

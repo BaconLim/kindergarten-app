@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '../contexts/AuthContext';
 
-const NOTE_OPTIONS = ['衣褲', '牙刷', '漱口杯', '衛生紙', '棉被清洗'];
-const READ_OPTIONS = ['園訊', '餐點表', '通知單', '教學計劃', '班報', '口罩', '收據'];
+const NOTE_OPTIONS = ['衣褲', '牙刷', '漱口杯', '衛生紙', '棉被清洗', '口罩'];
+const READ_OPTIONS = ['園訊', '餐點表', '通知單', '教學計劃', '班報', '收據', '學習單'];
 
 function TeacherDashboard() {
   const [students, setStudents] = useState([]);
@@ -90,12 +90,18 @@ function TeacherDashboard() {
       </div>
 
       <div className="space-y-3">
-        <h3 className="font-bold text-gray-700">近期紀錄</h3>
-        {books.map(b => (
+        <h3 className="font-bold text-gray-700">
+          {studentId === 'ALL' 
+            ? '全班近期聯絡簿' 
+            : `${students.find(s => String(s.id) === String(studentId))?.name || '未知學生'} 的聯絡簿`}
+        </h3>
+        {books
+          .filter(b => studentId === 'ALL' || String(b.student_id) === String(studentId))
+          .map(b => (
           <div key={b.id} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex justify-between items-center mb-2">
-              <span className="font-bold">{b.student_name}</span>
-              <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full">{b.status}</span>
+              <span className="font-bold">{b.student_name} <span className="text-xs text-gray-500 font-normal">({b.date.substring(0, 10)})</span></span>
+              <span className="text-[10px] bg-gray-100 px-2 py-0.5 rounded-full">{b.status === 'published' ? '已發布' : '待審核'}</span>
             </div>
             <p className="text-sm text-gray-600 whitespace-pre-wrap">{b.content}</p>
             {b.parent_reply && <div className="mt-2 p-2 bg-green-50 rounded text-xs text-green-700">家長回覆：{b.parent_reply}</div>}
