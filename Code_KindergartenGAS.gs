@@ -1,6 +1,6 @@
 /**
- * 幼兒園電子聯絡簿 - 終極完全體 (穩定版)
- * 包含：萬能登入、標題自適應、園長/老師/家長全功能
+ * 幼兒園電子聯絡簿 - 真相大白版 (GAS 後端)
+ * 依照真實 Excel 關聯結構 (managed_class, child_student_id) 重建連動邏輯
  */
 
 const DB_MAP = {
@@ -23,75 +23,66 @@ function doPost(e) {
 
     switch (action) {
       case 'get_reviews': return response(handleGetReviews(school));
+      case 'get_student_books': return response(handleGetStudentBooks(school, userData.student_id));
+      case 'get_teacher_books': return response(handleGetTeacherBooks(school, userData.managed_class));
+      case 'get_my_students': return response(handleGetMyStudents(school, userData.managed_class));
+      case 'create_book': return response(handleCreateBook(school, payload));
+      case 'create_books_batch': return response(handleCreateBooksBatch(school, payload));
       case 'publish_book': return response(handlePublishBook(school, payload));
       case 'publish_all_books': return response(handlePublishAllBooks(school, payload));
       case 'edit_book': return response(handleEditBook(school, payload));
       case 'delete_book': return response(handleDeleteBook(school, payload));
-      case 'get_my_students': return response(handleGetMyStudents(school, userData.username));
-      case 'get_teacher_books': return response(handleGetTeacherBooks(school, userData.username));
-      case 'create_book': return response(handleCreateBook(school, userData.username, payload));
-      case 'create_books_batch': return response(handleCreateBooksBatch(school, userData.username, payload));
-      case 'get_student_books': return response(handleGetStudentBooks(school, userData.student_id));
       case 'reply_book': return response(handleReplyBook(school, payload));
       case 'get_profiles': return response(handleGetProfiles(school, userData.student_id));
       case 'save_profile': return response(handleSaveProfile(school, userData.student_id, payload));
-      default: return response({ status: 'error', message: '未知行動：' + action });
+      default: return response({ status: 'error', message: '未知行動' });
     }
   } catch (err) {
-    return response({ status: 'error', message: "系統錯誤: " + err.toString() });
+    return response({ status: 'error', message: err.toString() });
   }
 }
 
-// --- 登入與驗證 ---
+// --- 核心邏輯 ---
 
 function handleLogin(payload) {
   const { username, password } = payload;
-  if (username === 'admin' && password === 'admin') {
-    return { status: 'success', data: { access_token: createToken('管理員', 'admin', 'sankuaicuo', null) } };
-  }
-
   for (let key in DB_MAP) {
     try {
       const users = getSheetData(DB_MAP[key], 'Users');
-      const user = users.find(u => {
-        const uName = u.username || u.Username || u['帳號'] || u['使用者名稱'];
-        const uPass = u.password || u.Password || u['密碼'];
-        return String(uName).trim() === String(username).trim() && String(uPass).trim() === String(password).trim();
-      });
+      const user = users.find(u => u.username == username && u.password == password);
       
       if (user) {
-        const role = user.role || user.Role || user['身分'] || 'parent';
-        const stuId = user.student_id || user.Student_ID || user['學生ID'] || null;
-        return { status: 'success', data: { access_token: createToken(username, role, key, stuId) } };
+        const token = Utilities.base64Encode(JSON.stringify({
+          username: user.username, 
+          role: user.role, 
+          school: key, 
+          student_id: user.child_student_id, // 家長專用
+          managed_class: user.managed_class, // 老師專用
+          exp: new Date().getTime() + 86400000
+        }));
+        return { status: 'success', data: { access_token: "eyJhbGci." + token + ".signature" } };
       }
     } catch(e) { continue; }
   }
   return { status: 'error', message: '帳號或密碼錯誤' };
 }
 
-function createToken(username, role, school, studentId) {
-  const payload = { username, role, school, student_id: studentId, exp: new Date().getTime() + 86400000 };
-  const base64 = Utilities.base64Encode(JSON.stringify(payload));
-  return "eyJhbGci. " + base64 + ".signature";
-}
-
 function verifyToken(token) {
+  if (!token) return null;
   try {
     const parts = token.split('.');
-    const b64 = parts[1].trim();
+    const b64 = parts.length > 1 ? parts[1].trim() : token.trim();
     const decoded = JSON.parse(Utilities.newBlob(Utilities.base64Decode(b64)).getDataAsString());
-    return (new Date().getTime() > decoded.exp) ? null : decoded;
+    if (new Date().getTime() > decoded.exp) return null;
+    return decoded;
   } catch(e) { return null; }
 }
 
-// --- 資料讀取與處理 ---
-
 function getSheetData(ssId, sheetName) {
-  const ss = SpreadsheetApp.openById(ssId);
-  const sheet = ss.getSheetByName(sheetName);
+  const sheet = SpreadsheetApp.openById(ssId).getSheetByName(sheetName);
   if (!sheet) return [];
   const data = sheet.getDataRange().getValues();
-  const headers = data[0].map(h => String(h).trim().toLowerCase().replace(/\s+/g, '_'));
+  const headers = data[0];
   return data.slice(1).map(row => {
     let obj = {};
     headers.forEach((h, i) => obj[h] = row[i]);
@@ -99,9 +90,85 @@ function getSheetData(ssId, sheetName) {
   });
 }
 
+// --- 老師與學生資料連動 ---
+
+function handleGetMyStudents(school, managedClass) {
+  const students = getSheetData(DB_MAP[school], 'Students');
+  // 過濾出負責班級的學生，並加上前端需要的 display_class_name
+  const myStudents = students
+    .filter(s => s.class_name == managedClass)
+    .map(s => ({ ...s, display_class_name: s.class_name }));
+  return { status: 'success', data: myStudents };
+}
+
+function handleGetTeacherBooks(school, managedClass) {
+  const books = getSheetData(DB_MAP[school], 'ContactBooks');
+  const students = getSheetData(DB_MAP[school], 'Students');
+  
+  // 1. 找出該班級所有的學生 ID
+  const myStudentIds = students.filter(s => s.class_name == managedClass).map(s => String(s.id));
+  
+  // 2. 過濾聯絡簿，並補上前端需要的 student_name
+  const myBooks = books
+    .filter(b => myStudentIds.includes(String(b.student_id)))
+    .map(b => {
+      const stu = students.find(s => String(s.id) == String(b.student_id));
+      return { ...b, student_name: stu ? stu.name : '未知學生' };
+    });
+    
+  return { status: 'success', data: myBooks.reverse() };
+}
+
+function handleGetStudentBooks(school, studentId) {
+  const books = getSheetData(DB_MAP[school], 'ContactBooks');
+  const students = getSheetData(DB_MAP[school], 'Students');
+  
+  const myBooks = books
+    .filter(b => String(b.student_id) == String(studentId) && b.status === 'published')
+    .map(b => {
+      const stu = students.find(s => String(s.id) == String(b.student_id));
+      return { ...b, student_name: stu ? stu.name : '未知學生' };
+    });
+    
+  return { status: 'success', data: myBooks.reverse() };
+}
+
 function handleGetReviews(school) {
   const books = getSheetData(DB_MAP[school], 'ContactBooks');
-  return { status: 'success', data: books.filter(b => b.status === 'pending_review') };
+  const students = getSheetData(DB_MAP[school], 'Students');
+  
+  const pendingBooks = books
+    .filter(b => b.status === 'pending_review')
+    .map(b => {
+      const stu = students.find(s => String(s.id) == String(b.student_id));
+      return { ...b, student_name: stu ? stu.name : '未知學生' };
+    });
+    
+  return { status: 'success', data: pendingBooks };
+}
+
+function handleCreateBook(school, payload) {
+  const ss = SpreadsheetApp.openById(DB_MAP[school]);
+  const sheet = ss.getSheetByName('ContactBooks');
+  const headers = sheet.getDataRange().getValues()[0];
+  const newRow = headers.map(h => {
+    if (h === 'id') return new Date().getTime();
+    if (h === 'date') return new Date();
+    if (h === 'student_id') return payload.student_id;
+    if (h === 'content') return payload.content;
+    if (h === 'status') return 'pending_review';
+    if (h === 'parent_reply') return '';
+    return '';
+  });
+  sheet.appendRow(newRow);
+  return { status: 'success' };
+}
+
+function handleCreateBooksBatch(school, payload) {
+  if (payload.student_ids && Array.isArray(payload.student_ids)) {
+    payload.student_ids.forEach(sid => handleCreateBook(school, { student_id: sid, content: payload.content }));
+  }
+  return { status: 'success' };
 }
 
 function handlePublishBook(school, payload) {
@@ -110,7 +177,9 @@ function handlePublishBook(school, payload) {
 }
 
 function handlePublishAllBooks(school, payload) {
-  payload.book_ids.forEach(id => updateStatus(school, 'ContactBooks', id, 'published'));
+  if (payload.book_ids && Array.isArray(payload.book_ids)) {
+    payload.book_ids.forEach(id => updateStatus(school, 'ContactBooks', id, 'published'));
+  }
   return { status: 'success' };
 }
 
@@ -118,8 +187,8 @@ function handleEditBook(school, payload) {
   const ss = SpreadsheetApp.openById(DB_MAP[school]);
   const sheet = ss.getSheetByName('ContactBooks');
   const data = sheet.getDataRange().getValues();
-  const idCol = data[0].map(h => String(h).toLowerCase()).indexOf('id');
-  const contentCol = data[0].map(h => String(h).toLowerCase()).indexOf('content');
+  const idCol = data[0].indexOf('id');
+  const contentCol = data[0].indexOf('content');
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] == payload.book_id) {
       sheet.getRange(i + 1, contentCol + 1).setValue(payload.content);
@@ -133,7 +202,7 @@ function handleDeleteBook(school, payload) {
   const ss = SpreadsheetApp.openById(DB_MAP[school]);
   const sheet = ss.getSheetByName('ContactBooks');
   const data = sheet.getDataRange().getValues();
-  const idCol = data[0].map(h => String(h).toLowerCase()).indexOf('id');
+  const idCol = data[0].indexOf('id');
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] == payload.book_id) {
       sheet.deleteRow(i + 1);
@@ -143,50 +212,12 @@ function handleDeleteBook(school, payload) {
   return { status: 'error' };
 }
 
-function handleGetMyStudents(school, username) {
-  const students = getSheetData(DB_MAP[school], 'Students');
-  return { status: 'success', data: students.filter(s => s.teacher_username == username) };
-}
-
-function handleGetTeacherBooks(school, username) {
-  const books = getSheetData(DB_MAP[school], 'ContactBooks');
-  return { status: 'success', data: books.filter(b => b.teacher_username == username).reverse() };
-}
-
-function handleCreateBook(school, username, payload) {
-  const ss = SpreadsheetApp.openById(DB_MAP[school]);
-  const sheet = ss.getSheetByName('ContactBooks');
-  const headers = sheet.getDataRange().getValues()[0];
-  const newRow = headers.map(h => {
-    const key = String(h).toLowerCase();
-    if (key === 'id') return new Date().getTime();
-    if (key === 'date') return new Date();
-    if (key === 'teacher_username') return username;
-    if (key === 'student_id') return payload.student_id;
-    if (key === 'content') return payload.content;
-    if (key === 'status') return 'pending_review';
-    return '';
-  });
-  sheet.appendRow(newRow);
-  return { status: 'success' };
-}
-
-function handleCreateBooksBatch(school, username, payload) {
-  payload.student_ids.forEach(sid => handleCreateBook(school, username, { student_id: sid, content: payload.content }));
-  return { status: 'success' };
-}
-
-function handleGetStudentBooks(school, studentId) {
-  const books = getSheetData(DB_MAP[school], 'ContactBooks');
-  return { status: 'success', data: books.filter(b => b.student_id == studentId && b.status === 'published').reverse() };
-}
-
 function handleReplyBook(school, payload) {
   const ss = SpreadsheetApp.openById(DB_MAP[school]);
   const sheet = ss.getSheetByName('ContactBooks');
   const data = sheet.getDataRange().getValues();
-  const idCol = data[0].map(h => String(h).toLowerCase()).indexOf('id');
-  const replyCol = data[0].map(h => String(h).toLowerCase()).indexOf('parent_reply');
+  const idCol = data[0].indexOf('id');
+  const replyCol = data[0].indexOf('parent_reply');
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] == payload.book_id) {
       sheet.getRange(i + 1, replyCol + 1).setValue(payload.parent_reply);
@@ -225,8 +256,8 @@ function updateStatus(school, sheetName, id, status) {
   const ss = SpreadsheetApp.openById(DB_MAP[school]);
   const sheet = ss.getSheetByName(sheetName);
   const data = sheet.getDataRange().getValues();
-  const idCol = data[0].map(h => String(h).toLowerCase()).indexOf('id');
-  const statusCol = data[0].map(h => String(h).toLowerCase()).indexOf('status');
+  const idCol = data[0].indexOf('id');
+  const statusCol = data[0].indexOf('status');
   for (let i = 1; i < data.length; i++) {
     if (data[i][idCol] == id) {
       sheet.getRange(i + 1, statusCol + 1).setValue(status);
@@ -236,5 +267,5 @@ function updateStatus(school, sheetName, id, status) {
 }
 
 function response(data) {
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.JSON);
+  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
