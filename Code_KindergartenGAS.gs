@@ -35,6 +35,9 @@ function doPost(e) {
       case 'reply_book': return response(handleReplyBook(school, payload));
       case 'get_profiles': return response(handleGetProfiles(school, payload?.student_id || userData.student_id));
       case 'save_profile': return response(handleSaveProfile(school, payload?.student_id || userData.student_id, payload));
+      case 'teacher_reply_book': return response(handleTeacherReplyBook(school, payload));
+      case 'get_template': return response(handleGetTemplate(school));
+      case 'save_template': return response(handleSaveTemplate(school, payload));
       default: return response({ status: 'error', message: '未知行動' });
     }
   } catch (err) {
@@ -163,8 +166,14 @@ function handleCreateBook(school, payload) {
     if (h === 'content') return payload.content;
     if (h === 'status') return 'pending_review';
     if (h === 'parent_reply') return '';
+    if (h === 'teacher_reply') return '';
     return '';
   });
+  // 如果 headers 中沒有 teacher_reply，補上
+  if (!headers.includes('teacher_reply')) {
+    sheet.getRange(1, headers.length + 1).setValue('teacher_reply');
+    newRow.push('');
+  }
   sheet.appendRow(newRow);
   return { status: 'success' };
 }
@@ -230,6 +239,54 @@ function handleReplyBook(school, payload) {
     }
   }
   return { status: 'error' };
+}
+
+function handleTeacherReplyBook(school, payload) {
+  const ss = SpreadsheetApp.openById(DB_MAP[school]);
+  const sheet = ss.getSheetByName('ContactBooks');
+  const data = sheet.getDataRange().getValues();
+  const headers = data[0];
+  let replyCol = headers.indexOf('teacher_reply');
+  
+  // 自動建立欄位
+  if (replyCol === -1) {
+    replyCol = headers.length;
+    sheet.getRange(1, replyCol + 1).setValue('teacher_reply');
+  }
+
+  const idCol = headers.indexOf('id');
+  for (let i = 1; i < data.length; i++) {
+    if (String(data[i][idCol]) === String(payload.book_id)) {
+      sheet.getRange(i + 1, replyCol + 1).setValue(payload.teacher_reply);
+      return { status: 'success' };
+    }
+  }
+  return { status: 'error' };
+}
+
+function handleGetTemplate(school) {
+  const templates = getSheetData(DB_MAP[school], 'Templates');
+  // 回傳最新的一筆公版（或者是第一筆）
+  const tpl = templates.length > 0 ? templates[0] : { course_content: '', other_announcements: '' };
+  return { status: 'success', data: tpl };
+}
+
+function handleSaveTemplate(school, payload) {
+  const ss = SpreadsheetApp.openById(DB_MAP[school]);
+  let sheet = ss.getSheetByName('Templates');
+  if (!sheet) {
+    sheet = ss.insertSheet('Templates');
+    sheet.appendRow(['course_content', 'other_announcements']);
+  }
+  
+  const data = sheet.getDataRange().getValues();
+  if (data.length <= 1) {
+    sheet.appendRow([payload.course_content || '', payload.other_announcements || '']);
+  } else {
+    // 永遠只覆蓋第一筆 (Row 2) 作為全校公版
+    sheet.getRange(2, 1, 1, 2).setValues([[payload.course_content || '', payload.other_announcements || '']]);
+  }
+  return { status: 'success' };
 }
 
 function handleGetProfiles(school, studentId) {

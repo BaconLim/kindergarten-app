@@ -8,6 +8,7 @@ function Layout() {
 
   const roleName = { 'admin': '園長', 'teacher': '教師', 'parent': '家長' }[userRole] || '';
   const isProfile = location.pathname === '/profile';
+  const isTemplate = location.pathname === '/template';
 
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col w-full max-w-md mx-auto shadow-2xl relative pb-16">
@@ -24,12 +25,17 @@ function Layout() {
       </main>
 
       <footer className="bg-white border-t fixed bottom-0 w-full max-w-md flex justify-around p-3 shadow-lg z-20">
-        <div onClick={() => navigate(`/${userRole}`)} className={`flex flex-col items-center cursor-pointer ${!isProfile ? 'text-indigo-600' : 'text-gray-400'}`}>
+        <div onClick={() => navigate(`/${userRole}`)} className={`flex flex-col items-center cursor-pointer ${(!isProfile && !isTemplate) ? 'text-indigo-600' : 'text-gray-400'}`}>
           <span className="text-xs font-bold">聯絡簿</span>
         </div>
         {userRole !== 'admin' && (
           <div onClick={() => navigate('/profile')} className={`flex flex-col items-center cursor-pointer ${isProfile ? 'text-indigo-600' : 'text-gray-400'}`}>
             <span className="text-xs font-bold">基本資料</span>
+          </div>
+        )}
+        {userRole === 'admin' && (
+          <div onClick={() => navigate('/template')} className={`flex flex-col items-center cursor-pointer ${isTemplate ? 'text-indigo-600' : 'text-gray-400'}`}>
+            <span className="text-xs font-bold">公版內容</span>
           </div>
         )}
       </footer>

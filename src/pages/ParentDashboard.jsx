@@ -5,6 +5,7 @@ function ParentDashboard() {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [replyInputs, setReplyInputs] = useState({});
+  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {} });
 
   const fetchBooks = async () => {
     try {
@@ -16,15 +17,27 @@ function ParentDashboard() {
 
   useEffect(() => { fetchBooks(); }, []);
 
-  const handleReplySubmit = async (bookId, quickReply = null) => {
+  const executeReplySubmit = async (bookId, quickReply = null) => {
     const finalReply = quickReply || replyInputs[bookId] || "已閱。";
     try {
-      await api.post('', { action: 'reply_book', payload: { book_id: bookId, parent_reply: finalReply } });
+      setLoading(true);
+      await api.post('', { action: 'reply_book', payload: { book_id: String(bookId), parent_reply: finalReply } });
+      alert('回覆成功！');
       fetchBooks();
     } catch (err) { alert('回覆失敗'); }
+    finally { setLoading(false); }
   };
 
-  if (loading) return <div className="text-center mt-10">載入中...</div>;
+  const handleReplyClick = (bookId, quickReply = null) => {
+    setConfirmDialog({
+      isOpen: true,
+      title: '確認回覆',
+      message: quickReply ? `確定要一鍵回覆「${quickReply}」嗎？` : '確定要送出此文字回覆嗎？',
+      onConfirm: () => executeReplySubmit(bookId, quickReply)
+    });
+  };
+
+  if (loading && books.length === 0) return <div className="text-center mt-10">載入中...</div>;
 
   return (
     <div className="space-y-4 max-w-lg mx-auto pb-20">
@@ -43,14 +56,39 @@ function ParentDashboard() {
             <div className="mt-3 space-y-2">
               <textarea placeholder="寫給老師的話..." className="w-full p-2 border rounded-lg text-xs" value={replyInputs[b.id] || ''} onChange={e => setReplyInputs({...replyInputs, [b.id]: e.target.value})} />
               <div className="flex gap-2">
-                <button onClick={() => handleReplySubmit(b.id, "已看過")} className="flex-1 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold">一鍵回覆「已看過」</button>
-                <button onClick={() => handleReplySubmit(b.id)} disabled={!replyInputs[b.id]} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold disabled:opacity-50">送出文字回覆</button>
+                <button onClick={() => handleReplyClick(b.id, "已看過")} className="flex-1 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-xs font-bold">一鍵回覆「已看過」</button>
+                <button onClick={() => handleReplyClick(b.id)} disabled={!replyInputs[b.id]} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold disabled:opacity-50">送出文字回覆</button>
               </div>
             </div>
           )}
-          {b.parent_reply && <div className="mt-3 p-3 bg-gray-50 rounded-lg text-xs text-gray-600 border-l-4 border-green-400">您的回覆：{b.parent_reply}</div>}
+          
+          {b.parent_reply && (
+            <div className="mt-3 space-y-2">
+              <div className="p-3 bg-gray-50 rounded-lg text-xs text-gray-600 border-l-4 border-green-400 font-bold">您的回覆：{b.parent_reply}</div>
+              {b.teacher_reply && (
+                <div className="p-3 bg-indigo-50 rounded-lg text-xs text-indigo-700 border-l-4 border-indigo-400 font-bold">老師的回覆：{b.teacher_reply}</div>
+              )}
+            </div>
+          )}
         </div>
       ))}
+
+      {/* 客製化確認彈窗 */}
+      {confirmDialog.isOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">{confirmDialog.title || '確認操作'}</h3>
+            <p className="text-gray-600 mb-6">{confirmDialog.message}</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDialog({ isOpen: false })} className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold">取消</button>
+              <button onClick={() => {
+                confirmDialog.onConfirm();
+                setConfirmDialog({ isOpen: false });
+              }} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold">確認執行</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
